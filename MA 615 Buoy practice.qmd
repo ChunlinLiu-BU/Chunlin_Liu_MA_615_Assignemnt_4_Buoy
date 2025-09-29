@@ -1,0 +1,101 @@
+---
+title: "MA 615 Buoy practice"
+format: html
+embed_sources: true
+---
+
+
+```{r}
+library(data.table)
+library(dplyr)
+library(lubridate)
+library(ggplot2)
+library(zoo)
+library(tibble)
+library(readr)
+```
+
+
+Historical Buoy data
+
+
+```{r}
+file_root <- "https://www.ndbc.noaa.gov/view_text_file.php?filename=44013h"
+tail <- ".txt.gz&dir=data/historical/stdmet/"
+
+load_buoy_data1 <- function(year) {
+  path <- paste0(file_root, year, tail)
+  
+  
+  if (year < 2007) {
+  header <- scan(path, what = 'character', nlines = 1)
+  buoy <- read.table(path, fill = TRUE, header = TRUE, sep = "")
+  buoy <- add_column(buoy, mm = NA, .after = "hh")
+  buoy <- add_column(buoy, TIDE = NA, .after = "VIS")
+    
+  } else {
+  header <- scan(path, what = 'character', nlines = 1)  
+  buoy <- fread(path, header = FALSE, skip = 1, fill = TRUE)
+
+    setnames(buoy, header)
+  }
+
+}
+
+all_data <- lapply(1984:2024, load_buoy_data1)
+
+combined_data <- rbindlist(all_data, fill = TRUE)
+
+combined_data <- combined_data %>%
+  mutate(
+    YY = as.character(YY),
+    `#YY` = as.character(`#YY`),
+    YYYY = as.character(YYYY),
+    MM = as.character(MM),
+    DD = as.character(DD),
+    hh = as.character(hh)
+  )
+
+
+
+combined_data <- combined_data %>%
+  mutate(datetime = suppressWarnings(
+    ymd_h(paste(YYYY, MM, DD, hh, sep = "-"))
+  ))
+
+
+
+
+```
+
+
+The question I have for this asignment is: How has the average wave height changed at buoy 44013 since 1984?
+
+```{r}
+
+
+combined_data <- combined_data %>%
+  mutate(WVHT = as.numeric(as.character(WVHT))) %>%
+  mutate(WVHT = na_if(WVHT, 99) %>% na_if(999) %>% na_if(9999)) %>%
+  mutate(Year = year(datetime))
+
+yearly_waves <- combined_data %>%
+  mutate(Year = year(datetime)) %>%
+  group_by(Year) %>%
+  summarise(avg_wave_height = mean(WVHT, na.rm = TRUE))
+
+
+
+
+ggplot(yearly_waves, aes(x = Year, y = avg_wave_height)) +
+  geom_line(color = "blue") +
+  geom_point(color = "red") +
+  labs(title = "Average Annual Wave Height at Buoy 44013 (1984-2024)",
+       subtitle = "Period: 1984–2024",
+       x = "Year", y = "Wave Height") +
+  theme_minimal()
+
+```
+
+By looking at the plot I have, I think the average weight height at the buoy 44013 is quite unstable. Overall of the time, the tide is around 0.91 meters, but in several year, the tide is extremely high or low. For example, in 2001, the time hieght on average is only 0.8 meters, and in 2025, the average height is around 1 meter. However, if we look at the data, it seems like this is a cycle. Form 1999 to 2004, it is the first cycle with some changes in average tide height, And then starting from 2004 to 2006, it looks similar with the beginning of the cycle 1. And the increases of the average tide height of the second cycle might caused by the green house effect. Thus, I assume the height of tide on average is a cycle of 6 years. However, according to my plot, only data from 1999 to 2006 exist, which I think some data is been dropped by having NA in the it. Thus, further analysis might be required. 
+
